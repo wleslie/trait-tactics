@@ -65,12 +65,50 @@ pub fn assign_via_assign_ref(input: proc_macro::TokenStream) -> proc_macro::Toke
     }
     let Args { head: ref head @ ImplTraitHead { ref tr, .. }, rhs, fn_tok, method, .. } =
         parse_macro_input!(input);
-    let mut stripped_tr = tr.clone();
-    strip_path_arguments(&mut stripped_tr);
+    let stripped_tr = {
+        let mut tr = tr.clone();
+        strip_path_arguments(&mut tr);
+        tr
+    };
     quote! {
         #head {
             #fn_tok #method(&mut self, rhs: #rhs) {
                 #stripped_tr::#method(self, &rhs)
+            }
+        }
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn binop_via_assign(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    struct Args {
+        head: ImplTraitHead,
+        rhs: Type,
+        fn_tok: Token![fn],
+        method: Ident,
+        delegate: Path,
+    }
+    impl Parse for Args {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let head = input.parse::<ImplTraitHead>()?;
+            let rhs = trait_operand_type(&head.tr)?;
+            let content;
+            braced!(content in input);
+            let fn_tok = content.parse()?;
+            let method = content.parse()?;
+            content.parse::<Token![=>]>()?;
+            let delegate = content.parse()?;
+            Ok(Self { head, rhs, fn_tok, method, delegate })
+        }
+    }
+    let Args { head, rhs, fn_tok, method, delegate, .. } = parse_macro_input!(input);
+    quote! {
+        #head {
+            type Output = Self;
+            #fn_tok #method(mut self, rhs: #rhs) -> Self::Output {
+                #delegate(&mut self, rhs);
+                self
             }
         }
     }

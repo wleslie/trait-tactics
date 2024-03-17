@@ -21,3 +21,6 @@ assign_via_binop_ref! {
 assign_via_assign_ref! {
     impl<T, U> AddAssign<B<U>> for A<T> where T: Clone { fn add_assign }
 }
+binop_via_assign! {
+    impl<T, U> Add<B<U>> for A<T> where T: Clone { fn add => AddAssign::add_assign }
+}
