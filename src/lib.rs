@@ -23,23 +23,7 @@ pub fn assign_via_binop_ref(input: TokenStream) -> TokenStream {
     impl Parse for Args {
         fn parse(input: ParseStream) -> syn::Result<Self> {
             let head = input.parse::<ImplTraitHead>()?;
-            let rhs = if let PathArguments::AngleBracketed(list) =
-                &head.tr.segments.last().expect("path cannot be empty").arguments
-            {
-                list.args.iter().exactly_one().ok().map(|arg| {
-                    if let GenericArgument::Type(ty) = arg {
-                        Ok(ty)
-                    } else {
-                        Err(syn::Error::new(arg.span(), "generic argument must be a type"))
-                    }
-                })
-            } else {
-                None
-            }
-            .unwrap_or_else(|| {
-                Err(syn::Error::new(head.tr.span(), "expected exactly one generic argument"))
-            })?
-            .clone();
+            let rhs = trait_operand_type(&head.tr)?;
             let content;
             braced!(content in input);
             let fn_tok = content.parse()?;
@@ -59,6 +43,32 @@ pub fn assign_via_binop_ref(input: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+fn trait_operand_type(tr: &Path) -> syn::Result<Type> {
+    Ok(match &tr.segments.last().expect("path cannot be empty").arguments {
+        PathArguments::None => None,
+        PathArguments::AngleBracketed(list) => {
+            let mut it = list.args.iter();
+            if let Some(arg) = it.next() {
+                if it.next().is_some() {
+                    return Err(syn::Error::new(
+                        tr.span(),
+                        "expected exactly one generic argument",
+                    ));
+                }
+                if let GenericArgument::Type(ty) = arg {
+                    Some(ty.clone())
+                } else {
+                    return Err(syn::Error::new(arg.span(), "generic argument must be a type"));
+                }
+            } else {
+                None
+            }
+        }
+        _ => return Err(syn::Error::new(tr.span(), "generic arguments must be angle-bracketed")),
+    }
+    .unwrap_or(syn::parse_quote!(Self)))
 }
 
 struct ImplTraitHead {
