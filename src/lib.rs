@@ -1,7 +1,7 @@
 //! Macros that provide common patterns for implementing traits in terms of other traits.
 
-use itertools::Itertools;
-use proc_macro::TokenStream;
+use std::mem;
+
 use quote::{quote, ToTokens};
 use syn::{
     braced,
@@ -12,7 +12,7 @@ use syn::{
 };
 
 #[proc_macro]
-pub fn assign_via_binop_ref(input: TokenStream) -> TokenStream {
+pub fn assign_via_binop_ref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     struct Args {
         head: ImplTraitHead,
         rhs: Type,
@@ -34,7 +34,6 @@ pub fn assign_via_binop_ref(input: TokenStream) -> TokenStream {
         }
     }
     let Args { head, rhs, fn_tok, method, delegate, .. } = parse_macro_input!(input);
-
     quote! {
         #head {
             #fn_tok #method(&mut self, rhs: #rhs) {
@@ -45,8 +44,51 @@ pub fn assign_via_binop_ref(input: TokenStream) -> TokenStream {
     .into()
 }
 
+#[proc_macro]
+pub fn assign_via_assign_ref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    struct Args {
+        head: ImplTraitHead,
+        rhs: Type,
+        fn_tok: Token![fn],
+        method: Ident,
+    }
+    impl Parse for Args {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let head = input.parse::<ImplTraitHead>()?;
+            let rhs = trait_operand_type(&head.tr)?;
+            let content;
+            braced!(content in input);
+            let fn_tok = content.parse()?;
+            let method = content.parse()?;
+            Ok(Self { head, rhs, fn_tok, method })
+        }
+    }
+    let Args { head: ref head @ ImplTraitHead { ref tr, .. }, rhs, fn_tok, method, .. } =
+        parse_macro_input!(input);
+    let mut stripped_tr = tr.clone();
+    strip_path_arguments(&mut stripped_tr);
+    quote! {
+        #head {
+            #fn_tok #method(&mut self, rhs: #rhs) {
+                #stripped_tr::#method(self, &rhs)
+            }
+        }
+    }
+    .into()
+}
+
+fn path_arguments(path: &Path) -> &PathArguments {
+    &path.segments.last().expect("path cannot be empty").arguments
+}
+fn path_arguments_mut(path: &mut Path) -> &mut PathArguments {
+    &mut path.segments.last_mut().expect("path cannot be empty").arguments
+}
+fn strip_path_arguments(path: &mut Path) -> PathArguments {
+    mem::replace(path_arguments_mut(path), PathArguments::None)
+}
+
 fn trait_operand_type(tr: &Path) -> syn::Result<Type> {
-    Ok(match &tr.segments.last().expect("path cannot be empty").arguments {
+    Ok(match path_arguments(tr) {
         PathArguments::None => None,
         PathArguments::AngleBracketed(list) => {
             let mut it = list.args.iter();
