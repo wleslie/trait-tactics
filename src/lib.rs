@@ -89,6 +89,10 @@ pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
 }
 
 /// Implements `A ⋄ B` in terms of `A ⋄= B` via `x ⋄= y; x`.
+///
+/// As an "off-label use", this macro can also be used to implement `A ⋄ B` in terms of an arbitrary
+/// function `f(&mut A, B)` via `f(&mut x, y); x`. `f` does not need to be a method of a compound
+/// assignment trait.
 #[proc_macro]
 pub fn binop_via_assign(input: TokenStream) -> TokenStream {
     let CustomImplTraitFn { head, rhs, fn_decl, tail: Delegation { delegate }, .. } =
