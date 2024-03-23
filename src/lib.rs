@@ -60,28 +60,11 @@ use syn::{
 /// Implements `A ⋄= B` in terms of `&A ⋄ &B` via `*self = &*self ⋄ y`.
 #[proc_macro]
 pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
-    struct Args {
-        head: ImplTraitHead,
-        rhs: Type,
-        decl: FnDecl,
-        delegation: Delegation,
-    }
-    impl Parse for Args {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let head = input.parse::<ImplTraitHead>()?;
-            let rhs = trait_operand_type(&head.tr)?;
-            let content;
-            braced!(content in input);
-            let decl = content.parse()?;
-            let delegation = content.parse()?;
-            Ok(Self { head, rhs, decl, delegation })
-        }
-    }
-    let Args { head, rhs, decl, delegation } = parse_macro_input!(input);
-    let Delegation { delegate } = delegation;
+    let CustomImplTraitFn { head, rhs, fn_decl, tail: Delegation { delegate }, .. } =
+        parse_macro_input!(input);
     quote! {
         #head {
-            #decl(&mut self, rhs: #rhs) {
+            #fn_decl(&mut self, rhs: #rhs) {
                 *self = #delegate(&*self, rhs);
             }
         }
@@ -92,32 +75,13 @@ pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
 /// Implements `A ⋄= B` in terms of `A ⋄= &B` via `self ⋄= &y`.
 #[proc_macro]
 pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
-    struct Args {
-        head: ImplTraitHead,
-        rhs: Type,
-        decl: FnDecl,
-    }
-    impl Parse for Args {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let head = input.parse::<ImplTraitHead>()?;
-            let rhs = trait_operand_type(&head.tr)?;
-            let content;
-            braced!(content in input);
-            let decl = content.parse()?;
-            Ok(Self { head, rhs, decl })
-        }
-    }
-    let Args { head, rhs, decl } = parse_macro_input!(input);
-    let stripped_tr = {
-        let mut tr = head.tr.clone();
-        strip_path_arguments(&mut tr);
-        tr
-    };
-    let method = &decl.ident;
+    let CustomImplTraitFn { head, tr_without_rhs, rhs, fn_decl, tail: Empty } =
+        parse_macro_input!(input);
+    let method = &fn_decl.ident;
     quote! {
         #head {
-            #decl(&mut self, rhs: #rhs) {
-                #stripped_tr::#method(self, &rhs)
+            #fn_decl(&mut self, rhs: #rhs) {
+                #tr_without_rhs::#method(self, &rhs)
             }
         }
     }
@@ -127,29 +91,12 @@ pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
 /// Implements `A ⋄ B` in terms of `A ⋄= B` via `x ⋄= y; x`.
 #[proc_macro]
 pub fn binop_via_assign(input: TokenStream) -> TokenStream {
-    struct Args {
-        head: ImplTraitHead,
-        rhs: Type,
-        decl: FnDecl,
-        delegation: Delegation,
-    }
-    impl Parse for Args {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let head = input.parse::<ImplTraitHead>()?;
-            let rhs = trait_operand_type(&head.tr)?;
-            let content;
-            braced!(content in input);
-            let decl = content.parse()?;
-            let delegation = content.parse()?;
-            Ok(Self { head, rhs, decl, delegation })
-        }
-    }
-    let Args { head, rhs, decl, delegation } = parse_macro_input!(input);
-    let Delegation { delegate } = delegation;
+    let CustomImplTraitFn { head, rhs, fn_decl, tail: Delegation { delegate }, .. } =
+        parse_macro_input!(input);
     quote! {
         #head {
             type Output = Self;
-            #decl(mut self, rhs: #rhs) -> Self::Output {
+            #fn_decl(mut self, rhs: #rhs) -> Self::Output {
                 #delegate(&mut self, rhs);
                 self
             }
@@ -161,39 +108,15 @@ pub fn binop_via_assign(input: TokenStream) -> TokenStream {
 /// Implements `A ⋄ B` in terms of `A ⋄ &B` via `x ⋄ &y`.
 #[proc_macro]
 pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
-    struct Args {
-        head: ImplTraitHead,
-        rhs: Type,
-        decl: FnDecl,
-        ret: ReturnType,
-    }
-    impl Parse for Args {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let head = input.parse::<ImplTraitHead>()?;
-            let rhs = trait_operand_type(&head.tr)?;
-            let content;
-            braced!(content in input);
-            let decl = content.parse()?;
-            let ret = content.parse()?;
-            Ok(Self { head, rhs, decl, ret })
-        }
-    }
-    let Args { head, rhs, decl, ret } = parse_macro_input!(input);
-    let output_ty = match ret {
-        ReturnType::Default => syn::parse_quote! { () },
-        ReturnType::Type(_, ty) => *ty,
-    };
-    let stripped_tr = {
-        let mut tr = head.tr.clone();
-        strip_path_arguments(&mut tr);
-        tr
-    };
-    let method = &decl.ident;
+    let CustomImplTraitFn::<ReturnType> { head, tr_without_rhs, rhs, fn_decl, tail: ret } =
+        parse_macro_input!(input);
+    let output_ty = ret.into_type();
+    let method = &fn_decl.ident;
     quote! {
         #head {
             type Output = #output_ty;
-            #decl(self, rhs: #rhs) -> Self::Output {
-                #stripped_tr::#method(self, &rhs)
+            #fn_decl(self, rhs: #rhs) -> Self::Output {
+                #tr_without_rhs::#method(self, &rhs)
             }
         }
     }
@@ -203,39 +126,15 @@ pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
 /// Implements `A ⋄ B` in terms of `&A ⋄ B` via `&x ⋄ y`.
 #[proc_macro]
 pub fn binop_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
-    struct Args {
-        head: ImplTraitHead,
-        rhs: Type,
-        decl: FnDecl,
-        ret: ReturnType,
-    }
-    impl Parse for Args {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let head = input.parse::<ImplTraitHead>()?;
-            let rhs = trait_operand_type(&head.tr)?;
-            let content;
-            braced!(content in input);
-            let decl = content.parse()?;
-            let ret = content.parse()?;
-            Ok(Self { head, rhs, decl, ret })
-        }
-    }
-    let Args { head, rhs, decl, ret } = parse_macro_input!(input);
-    let output_ty = match ret {
-        ReturnType::Default => syn::parse_quote! { () },
-        ReturnType::Type(_, ty) => *ty,
-    };
-    let stripped_tr = {
-        let mut tr = head.tr.clone();
-        strip_path_arguments(&mut tr);
-        tr
-    };
-    let method = &decl.ident;
+    let CustomImplTraitFn::<ReturnType> { head, tr_without_rhs, rhs, fn_decl, tail: ret } =
+        parse_macro_input!(input);
+    let output_ty = ret.into_type();
+    let method = &fn_decl.ident;
     quote! {
         #head {
             type Output = #output_ty;
-            #decl(self, rhs: #rhs) -> Self::Output {
-                #stripped_tr::#method(&self, rhs)
+            #fn_decl(self, rhs: #rhs) -> Self::Output {
+                #tr_without_rhs::#method(&self, rhs)
             }
         }
     }
@@ -244,22 +143,16 @@ pub fn binop_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
 
 // --------------------------------------------------------------------------
 
-fn path_arguments(path: &Path) -> &PathArguments {
-    &path.segments.last().expect("path cannot be empty").arguments
-}
-fn path_arguments_mut(path: &mut Path) -> &mut PathArguments {
-    &mut path.segments.last_mut().expect("path cannot be empty").arguments
-}
-fn strip_path_arguments(path: &mut Path) -> PathArguments {
-    mem::replace(path_arguments_mut(path), PathArguments::None)
-}
-
-/// Extracts the single generic type argument at the end of a [Path].
+/// Given a [Path] of the form `P<T>`, removes and returns the `T`.
 ///
 /// If the path has no generic argument, returns the `Self` type, because most built-in
 /// binary-operator traits like [std::ops::Add] declare a default operand `<Rhs = Self>`.
-fn trait_operand_type(tr: &Path) -> syn::Result<Type> {
-    Ok(match path_arguments(tr) {
+fn strip_trait_operand_type(tr: &mut Path) -> syn::Result<Type> {
+    let path_args = mem::replace(
+        &mut tr.segments.last_mut().expect("path cannot be empty").arguments,
+        PathArguments::None,
+    );
+    Ok(match path_args {
         PathArguments::None => None,
         PathArguments::AngleBracketed(list) => {
             let mut it = list.args.iter();
@@ -284,6 +177,40 @@ fn trait_operand_type(tr: &Path) -> syn::Result<Type> {
     .unwrap_or(syn::parse_quote!(Self)))
 }
 
+trait ReturnTypeExt {
+    fn into_type(self) -> Type;
+}
+impl ReturnTypeExt for ReturnType {
+    fn into_type(self) -> Type {
+        match self {
+            ReturnType::Default => syn::parse_quote! { () },
+            ReturnType::Type(_, ty) => *ty,
+        }
+    }
+}
+
+/// `impl ... for ... { fn foo ... }`
+struct CustomImplTraitFn<Tail> {
+    head: ImplTraitHead,
+    tr_without_rhs: Path,
+    rhs: Type,
+    fn_decl: FnDecl,
+    tail: Tail,
+}
+impl<Tail: Parse> Parse for CustomImplTraitFn<Tail> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let head = input.parse::<ImplTraitHead>()?;
+        let mut tr_without_rhs = head.tr.clone();
+        let rhs = strip_trait_operand_type(&mut tr_without_rhs)?;
+        let content;
+        braced!(content in input);
+        let fn_decl = content.parse()?;
+        let tail = content.parse()?;
+        Ok(Self { head, tr_without_rhs, rhs, fn_decl, tail })
+    }
+}
+
+/// `impl ... for ...`
 struct ImplTraitHead {
     impl_tok: Token![impl],
     generics: Generics,
@@ -310,6 +237,7 @@ impl ToTokens for ImplTraitHead {
     }
 }
 
+/// `fn foo`
 struct FnDecl {
     fn_tok: Token![fn],
     ident: Ident,
@@ -328,6 +256,7 @@ impl ToTokens for FnDecl {
     }
 }
 
+/// `=> Foo::bar`
 struct Delegation {
     delegate: Path,
 }
@@ -336,5 +265,12 @@ impl Parse for Delegation {
         input.parse::<Token![=>]>()?;
         let delegate = input.parse()?;
         Ok(Self { delegate })
+    }
+}
+
+struct Empty;
+impl Parse for Empty {
+    fn parse(_input: ParseStream) -> syn::Result<Self> {
+        Ok(Self)
     }
 }
