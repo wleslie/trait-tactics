@@ -1,4 +1,46 @@
 //! Macros that provide common patterns for implementing traits in terms of other traits.
+//!
+//! # Binary operators
+//!
+//! A *binary operator trait* is a trait that has:
+//! - A single generic type argument representing the right-hand-side operand, commonly defaulted to
+//!   `Self`
+//! - A single associated type `Output`
+//! - A single method whose two arguments are `self` and the right-hand-side operand, returning
+//!   `Self::Output`
+//!
+//! A *compound assignment operator trait* is a trait that has:
+//! - A single generic type argument representing the right-hand-side operand, commonly defaulted to
+//!   `Self`
+//! - A single method whose two arguments are `&mut self` and the right-hand-side operand, returning
+//!   `()`
+//!
+//! Particularly when overloading one of Rust's built-in binary operators, it is customary to
+//! provide implementations not only for `A ⋄ B`, but also for `&A ⋄ B`, `A ⋄ &B`, and `&A ⋄ &B`
+//! (where `⋄` stands for the operator to be overloaded, and `A` and `B` are operand types).
+//! Furthermore, if the binary operator has a corresponding compound assignment operator (which we
+//! will refer to as `⋄=`), it is customary to provide implements for `A ⋄= B` and `A ⋄= &B`. The
+//! macros provided by this module assist in writing these additional trait implementations.
+//!
+//! First, implement `&A ⋄ &B`. This is the most general implementation, as all other
+//! implementations can be written in terms of it.
+//!
+//! Then, provide the implementations suggested below, either by using the appropriate macro, or by
+//! explicitly writing an optimized implementation.
+//!
+//! - If the binary operator has a corresponding compound assignment operator:
+//!   1. Implement `A ⋄= &B` in terms of `&A ⋄ &B` using [assign_via_binop_ref_lhs!].
+//!   1. Implement `A ⋄= B` in terms of `A ⋄= &B` using [assign_via_assign_ref!].
+//!   1. Implement `A ⋄ &B` in terms of `A ⋄= &B` using [binop_via_assign!].
+//!   1. Implement `&A ⋄ B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_rhs!].
+//!   1. Implement `A ⋄ B` in terms of `A ⋄= B` using [binop_via_assign!].
+//! - Otherwise:
+//!   1. Implement `A ⋄ &B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_lhs!].
+//!   1. Implement `&A ⋄ B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_rhs!].
+//!   1. Implement `A ⋄ B` in one of two ways:
+//!      - in terms of `&A ⋄ B` using [binop_via_binop_ref_lhs!], *or*
+//!      - in terms of `A ⋄ &B` using [binop_via_binop_ref_rhs!] (preferred when `A ⋄ &B` is an
+//!        optimized implementation).
 
 use std::mem;
 
@@ -15,7 +57,7 @@ use syn::{
 
 // --------------------------------------------------------------------------
 
-/// Implements `&mut A ⋄= B` in terms of `&A ⋄ &B → A` via `*self = &*self ⋄ y`.
+/// Implements `A ⋄= B` in terms of `&A ⋄ &B` via `*self = &*self ⋄ y`.
 #[proc_macro]
 pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
     struct Args {
@@ -47,7 +89,7 @@ pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Implements `&mut A ⋄= B` in terms of `&mut A ⋄= &B` via `self ⋄= &y`.
+/// Implements `A ⋄= B` in terms of `A ⋄= &B` via `self ⋄= &y`.
 #[proc_macro]
 pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
     struct Args {
@@ -82,7 +124,7 @@ pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Implements `A ⋄ B → A` in terms of `&mut A ⋄= B` via `x ⋄= y; x`.
+/// Implements `A ⋄ B` in terms of `A ⋄= B` via `x ⋄= y; x`.
 #[proc_macro]
 pub fn binop_via_assign(input: TokenStream) -> TokenStream {
     struct Args {
@@ -116,7 +158,7 @@ pub fn binop_via_assign(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Implements `A ⋄ B → A` in terms of `A ⋄ &B → A` via `x ⋄ &y`.
+/// Implements `A ⋄ B` in terms of `A ⋄ &B` via `x ⋄ &y`.
 #[proc_macro]
 pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
     struct Args {
@@ -158,7 +200,7 @@ pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Implements `A ⋄ B → A` in terms of `&A ⋄ B → A` via `&x ⋄ y`.
+/// Implements `A ⋄ B` in terms of `&A ⋄ B` via `&x ⋄ y`.
 #[proc_macro]
 pub fn binop_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
     struct Args {
@@ -212,6 +254,10 @@ fn strip_path_arguments(path: &mut Path) -> PathArguments {
     mem::replace(path_arguments_mut(path), PathArguments::None)
 }
 
+/// Extracts the single generic type argument at the end of a [Path].
+///
+/// If the path has no generic argument, returns the `Self` type, because most built-in
+/// binary-operator traits like [std::ops::Add] declare a default operand `<Rhs = Self>`.
 fn trait_operand_type(tr: &Path) -> syn::Result<Type> {
     Ok(match path_arguments(tr) {
         PathArguments::None => None,
