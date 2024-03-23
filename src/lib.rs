@@ -13,6 +13,9 @@ use syn::{
     GenericArgument, Generics, Ident, Path, PathArguments, ReturnType, Token, Type,
 };
 
+// --------------------------------------------------------------------------
+
+/// Implements `&mut A ⋄= B` in terms of `&A ⋄ &B → A` via `*self = &*self ⋄ y`.
 #[proc_macro]
 pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
     struct Args {
@@ -44,6 +47,7 @@ pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
     .into()
 }
 
+/// Implements `&mut A ⋄= B` in terms of `&mut A ⋄= &B` via `self ⋄= &y`.
 #[proc_macro]
 pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
     struct Args {
@@ -78,6 +82,7 @@ pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
     .into()
 }
 
+/// Implements `A ⋄ B → A` in terms of `&mut A ⋄= B` via `x ⋄= y; x`.
 #[proc_macro]
 pub fn binop_via_assign(input: TokenStream) -> TokenStream {
     struct Args {
@@ -111,6 +116,7 @@ pub fn binop_via_assign(input: TokenStream) -> TokenStream {
     .into()
 }
 
+/// Implements `A ⋄ B → A` in terms of `A ⋄ &B → A` via `x ⋄ &y`.
 #[proc_macro]
 pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
     struct Args {
@@ -151,6 +157,50 @@ pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
     }
     .into()
 }
+
+/// Implements `A ⋄ B → A` in terms of `&A ⋄ B → A` via `&x ⋄ y`.
+#[proc_macro]
+pub fn binop_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
+    struct Args {
+        head: ImplTraitHead,
+        rhs: Type,
+        decl: FnDecl,
+        ret: ReturnType,
+    }
+    impl Parse for Args {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let head = input.parse::<ImplTraitHead>()?;
+            let rhs = trait_operand_type(&head.tr)?;
+            let content;
+            braced!(content in input);
+            let decl = content.parse()?;
+            let ret = content.parse()?;
+            Ok(Self { head, rhs, decl, ret })
+        }
+    }
+    let Args { head, rhs, decl, ret } = parse_macro_input!(input);
+    let output_ty = match ret {
+        ReturnType::Default => syn::parse_quote! { () },
+        ReturnType::Type(_, ty) => *ty,
+    };
+    let stripped_tr = {
+        let mut tr = head.tr.clone();
+        strip_path_arguments(&mut tr);
+        tr
+    };
+    let method = &decl.ident;
+    quote! {
+        #head {
+            type Output = #output_ty;
+            #decl(self, rhs: #rhs) -> Self::Output {
+                #stripped_tr::#method(&self, rhs)
+            }
+        }
+    }
+    .into()
+}
+
+// --------------------------------------------------------------------------
 
 fn path_arguments(path: &Path) -> &PathArguments {
     &path.segments.last().expect("path cannot be empty").arguments
