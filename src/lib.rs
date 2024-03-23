@@ -2,23 +2,24 @@
 
 use std::mem;
 
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens};
 use syn::{
     braced,
     parse::{Parse, ParseStream},
     parse_macro_input,
     spanned::Spanned,
-    GenericArgument, Generics, Ident, Path, PathArguments, Token, Type,
+    GenericArgument, Generics, Ident, Path, PathArguments, ReturnType, Token, Type,
 };
 
 #[proc_macro]
-pub fn assign_via_binop_ref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
     struct Args {
         head: ImplTraitHead,
         rhs: Type,
-        fn_tok: Token![fn],
-        method: Ident,
-        delegate: Path,
+        decl: FnDecl,
+        delegation: Delegation,
     }
     impl Parse for Args {
         fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -26,17 +27,16 @@ pub fn assign_via_binop_ref(input: proc_macro::TokenStream) -> proc_macro::Token
             let rhs = trait_operand_type(&head.tr)?;
             let content;
             braced!(content in input);
-            let fn_tok = content.parse()?;
-            let method = content.parse()?;
-            content.parse::<Token![=>]>()?;
-            let delegate = content.parse()?;
-            Ok(Self { head, rhs, fn_tok, method, delegate })
+            let decl = content.parse()?;
+            let delegation = content.parse()?;
+            Ok(Self { head, rhs, decl, delegation })
         }
     }
-    let Args { head, rhs, fn_tok, method, delegate, .. } = parse_macro_input!(input);
+    let Args { head, rhs, decl, delegation } = parse_macro_input!(input);
+    let Delegation { delegate } = delegation;
     quote! {
         #head {
-            #fn_tok #method(&mut self, rhs: #rhs) {
+            #decl(&mut self, rhs: #rhs) {
                 *self = #delegate(&*self, rhs);
             }
         }
@@ -45,12 +45,11 @@ pub fn assign_via_binop_ref(input: proc_macro::TokenStream) -> proc_macro::Token
 }
 
 #[proc_macro]
-pub fn assign_via_assign_ref(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
     struct Args {
         head: ImplTraitHead,
         rhs: Type,
-        fn_tok: Token![fn],
-        method: Ident,
+        decl: FnDecl,
     }
     impl Parse for Args {
         fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -58,21 +57,20 @@ pub fn assign_via_assign_ref(input: proc_macro::TokenStream) -> proc_macro::Toke
             let rhs = trait_operand_type(&head.tr)?;
             let content;
             braced!(content in input);
-            let fn_tok = content.parse()?;
-            let method = content.parse()?;
-            Ok(Self { head, rhs, fn_tok, method })
+            let decl = content.parse()?;
+            Ok(Self { head, rhs, decl })
         }
     }
-    let Args { head: ref head @ ImplTraitHead { ref tr, .. }, rhs, fn_tok, method, .. } =
-        parse_macro_input!(input);
+    let Args { head, rhs, decl } = parse_macro_input!(input);
     let stripped_tr = {
-        let mut tr = tr.clone();
+        let mut tr = head.tr.clone();
         strip_path_arguments(&mut tr);
         tr
     };
+    let method = &decl.ident;
     quote! {
         #head {
-            #fn_tok #method(&mut self, rhs: #rhs) {
+            #decl(&mut self, rhs: #rhs) {
                 #stripped_tr::#method(self, &rhs)
             }
         }
@@ -81,13 +79,12 @@ pub fn assign_via_assign_ref(input: proc_macro::TokenStream) -> proc_macro::Toke
 }
 
 #[proc_macro]
-pub fn binop_via_assign(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn binop_via_assign(input: TokenStream) -> TokenStream {
     struct Args {
         head: ImplTraitHead,
         rhs: Type,
-        fn_tok: Token![fn],
-        method: Ident,
-        delegate: Path,
+        decl: FnDecl,
+        delegation: Delegation,
     }
     impl Parse for Args {
         fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -95,20 +92,60 @@ pub fn binop_via_assign(input: proc_macro::TokenStream) -> proc_macro::TokenStre
             let rhs = trait_operand_type(&head.tr)?;
             let content;
             braced!(content in input);
-            let fn_tok = content.parse()?;
-            let method = content.parse()?;
-            content.parse::<Token![=>]>()?;
-            let delegate = content.parse()?;
-            Ok(Self { head, rhs, fn_tok, method, delegate })
+            let decl = content.parse()?;
+            let delegation = content.parse()?;
+            Ok(Self { head, rhs, decl, delegation })
         }
     }
-    let Args { head, rhs, fn_tok, method, delegate, .. } = parse_macro_input!(input);
+    let Args { head, rhs, decl, delegation } = parse_macro_input!(input);
+    let Delegation { delegate } = delegation;
     quote! {
         #head {
             type Output = Self;
-            #fn_tok #method(mut self, rhs: #rhs) -> Self::Output {
+            #decl(mut self, rhs: #rhs) -> Self::Output {
                 #delegate(&mut self, rhs);
                 self
+            }
+        }
+    }
+    .into()
+}
+
+#[proc_macro]
+pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
+    struct Args {
+        head: ImplTraitHead,
+        rhs: Type,
+        decl: FnDecl,
+        ret: ReturnType,
+    }
+    impl Parse for Args {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let head = input.parse::<ImplTraitHead>()?;
+            let rhs = trait_operand_type(&head.tr)?;
+            let content;
+            braced!(content in input);
+            let decl = content.parse()?;
+            let ret = content.parse()?;
+            Ok(Self { head, rhs, decl, ret })
+        }
+    }
+    let Args { head, rhs, decl, ret } = parse_macro_input!(input);
+    let output_ty = match ret {
+        ReturnType::Default => syn::parse_quote! { () },
+        ReturnType::Type(_, ty) => *ty,
+    };
+    let stripped_tr = {
+        let mut tr = head.tr.clone();
+        strip_path_arguments(&mut tr);
+        tr
+    };
+    let method = &decl.ident;
+    quote! {
+        #head {
+            type Output = #output_ty;
+            #decl(self, rhs: #rhs) -> Self::Output {
+                #stripped_tr::#method(self, &rhs)
             }
         }
     }
@@ -170,9 +207,38 @@ impl Parse for ImplTraitHead {
     }
 }
 impl ToTokens for ImplTraitHead {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
         let Self { impl_tok, generics, tr, for_tok, self_ty } = self;
         let where_clause = &generics.where_clause;
         tokens.extend(quote!(#impl_tok #generics #tr #for_tok #self_ty #where_clause));
+    }
+}
+
+struct FnDecl {
+    fn_tok: Token![fn],
+    ident: Ident,
+}
+impl Parse for FnDecl {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let fn_tok = input.parse()?;
+        let ident = input.parse()?;
+        Ok(Self { fn_tok, ident })
+    }
+}
+impl ToTokens for FnDecl {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        let Self { fn_tok, ident } = self;
+        tokens.extend(quote!(#fn_tok #ident));
+    }
+}
+
+struct Delegation {
+    delegate: Path,
+}
+impl Parse for Delegation {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        input.parse::<Token![=>]>()?;
+        let delegate = input.parse()?;
+        Ok(Self { delegate })
     }
 }
