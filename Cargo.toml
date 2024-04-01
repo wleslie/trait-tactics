@@ -1,13 +1,11 @@
-[package]
-name = "trait-tactics"
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-itertools = "0.12.1"
-proc-macro2 = "1.0.79"
-quote = "1.0.35"
-syn = { version = "2.0.53", features = ["full"] }
+[package]
+name = "trait-tactics"
+version.workspace = true
+edition.workspace = true
 
-[lib]
-proc-macro = true
+[dependencies]
+trait-tactics-macros = { path = "macros" }
