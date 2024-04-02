@@ -70,3 +70,6 @@ pub use trait_tactics_macros::binop_via_binop_ref_rhs;
 ///
 /// See the [module documentation](self) for further information.
 pub use trait_tactics_macros::binop_via_binop_ref_lhs;
+
+/// Implements [PartialOrd] in terms of [Ord].
+pub use trait_tactics_macros::partial_ord_via_ord;

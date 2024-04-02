@@ -6,90 +6,57 @@ use quote::{quote, ToTokens};
 use syn::{
     braced,
     parse::{Parse, ParseStream},
-    parse_macro_input,
+    parse_macro_input, parse_quote,
     spanned::Spanned,
-    GenericArgument, Generics, Ident, Path, PathArguments, ReturnType, Token, Type,
+    GenericArgument, Generics, Ident, ItemImpl, Path, PathArguments, ReturnType, Token, Type,
 };
 
 // --------------------------------------------------------------------------
 
-#[proc_macro]
-pub fn assign_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
-    let CustomImplTraitFn { head, rhs, fn_decl, tail: Delegation { delegate }, .. } =
-        parse_macro_input!(input);
-    quote! {
-        #head {
-            #fn_decl(&mut self, rhs: #rhs) {
-                *self = #delegate(&*self, rhs);
-            }
+mod binop;
+
+macro_rules! define_proc_macro {
+    ($name:ident, $delegate:path $(,)?) => {
+        #[proc_macro]
+        pub fn $name(input: TokenStream) -> TokenStream {
+            $delegate(input)
         }
-    }
-    .into()
+    };
 }
 
-#[proc_macro]
-pub fn assign_via_assign_ref(input: TokenStream) -> TokenStream {
-    let CustomImplTraitFn { head, tr_without_rhs, rhs, fn_decl, tail: Empty } =
-        parse_macro_input!(input);
-    let method = &fn_decl.ident;
-    quote! {
-        #head {
-            #fn_decl(&mut self, rhs: #rhs) {
-                #tr_without_rhs::#method(self, &rhs)
-            }
-        }
-    }
-    .into()
-}
+define_proc_macro!(assign_via_binop_ref_lhs, binop::assign_via_binop_ref_lhs);
+define_proc_macro!(assign_via_assign_ref, binop::assign_via_assign_ref);
+define_proc_macro!(binop_via_assign, binop::binop_via_assign);
+define_proc_macro!(binop_via_binop_ref_rhs, binop::binop_via_binop_ref_rhs);
+define_proc_macro!(binop_via_binop_ref_lhs, binop::binop_via_binop_ref_lhs);
 
-#[proc_macro]
-pub fn binop_via_assign(input: TokenStream) -> TokenStream {
-    let CustomImplTraitFn { head, rhs, fn_decl, tail: Delegation { delegate }, .. } =
-        parse_macro_input!(input);
-    quote! {
-        #head {
-            type Output = Self;
-            #fn_decl(mut self, rhs: #rhs) -> Self::Output {
-                #delegate(&mut self, rhs);
-                self
-            }
-        }
-    }
-    .into()
-}
+// --------------------------------------------------------------------------
 
-#[proc_macro]
-pub fn binop_via_binop_ref_rhs(input: TokenStream) -> TokenStream {
-    let CustomImplTraitFn::<ReturnType> { head, tr_without_rhs, rhs, fn_decl, tail: ret } =
-        parse_macro_input!(input);
-    let output_ty = ret.into_type();
-    let method = &fn_decl.ident;
-    quote! {
-        #head {
-            type Output = #output_ty;
-            #fn_decl(self, rhs: #rhs) -> Self::Output {
-                #tr_without_rhs::#method(self, &rhs)
+#[proc_macro_attribute]
+pub fn partial_ord_via_ord(attr: TokenStream, item: TokenStream) -> TokenStream {
+    parse_macro_input!(attr as Empty);
+    struct Subject {
+        item_impl: ItemImpl,
+    }
+    impl Parse for Subject {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let item_impl = input.parse::<ItemImpl>()?;
+            if !item_impl.items.is_empty() {
+                return Err(syn::Error::new(
+                    item_impl.brace_token.span.join(),
+                    "impl body must be empty",
+                ));
             }
+            Ok(Self { item_impl })
         }
     }
-    .into()
-}
-
-#[proc_macro]
-pub fn binop_via_binop_ref_lhs(input: TokenStream) -> TokenStream {
-    let CustomImplTraitFn::<ReturnType> { head, tr_without_rhs, rhs, fn_decl, tail: ret } =
-        parse_macro_input!(input);
-    let output_ty = ret.into_type();
-    let method = &fn_decl.ident;
-    quote! {
-        #head {
-            type Output = #output_ty;
-            #fn_decl(self, rhs: #rhs) -> Self::Output {
-                #tr_without_rhs::#method(&self, rhs)
-            }
+    let Subject { mut item_impl } = parse_macro_input!(item as Subject);
+    item_impl.items.push(parse_quote! {
+        fn partial_cmp(&self, other: &Self) -> ::std::option::Option<::std::cmp::Ordering> {
+            ::std::option::Option::Some(::std::cmp::Ord::cmp(self, other))
         }
-    }
-    .into()
+    });
+    item_impl.into_token_stream().into()
 }
 
 // --------------------------------------------------------------------------
