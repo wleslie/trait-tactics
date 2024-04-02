@@ -73,3 +73,6 @@ pub use trait_tactics_macros::binop_via_binop_ref_lhs;
 
 /// Implements [PartialOrd] in terms of [Ord].
 pub use trait_tactics_macros::partial_ord_via_ord;
+
+/// Implements [Sum][std::iter::Sum] in terms of [Zero][num_traits::Zero] and [Add][std::ops::Add].
+pub use trait_tactics_macros::sum_via_fold_zero_add;

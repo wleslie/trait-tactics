@@ -8,4 +8,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+num-traits = "0.2.18"
 trait-tactics-macros = { path = "macros" }

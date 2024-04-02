@@ -35,25 +35,22 @@ define_proc_macro!(binop_via_binop_ref_lhs, binop::binop_via_binop_ref_lhs);
 #[proc_macro_attribute]
 pub fn partial_ord_via_ord(attr: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(attr as Empty);
-    struct Subject {
-        item_impl: ItemImpl,
-    }
-    impl Parse for Subject {
-        fn parse(input: ParseStream) -> syn::Result<Self> {
-            let item_impl = input.parse::<ItemImpl>()?;
-            if !item_impl.items.is_empty() {
-                return Err(syn::Error::new(
-                    item_impl.brace_token.span.join(),
-                    "impl body must be empty",
-                ));
-            }
-            Ok(Self { item_impl })
-        }
-    }
-    let Subject { mut item_impl } = parse_macro_input!(item as Subject);
+    let ItemImplEmpty(mut item_impl) = parse_macro_input!(item);
     item_impl.items.push(parse_quote! {
         fn partial_cmp(&self, other: &Self) -> ::std::option::Option<::std::cmp::Ordering> {
             ::std::option::Option::Some(::std::cmp::Ord::cmp(self, other))
+        }
+    });
+    item_impl.into_token_stream().into()
+}
+
+#[proc_macro_attribute]
+pub fn sum_via_fold_zero_add(attr: TokenStream, item: TokenStream) -> TokenStream {
+    parse_macro_input!(attr as Empty);
+    let ItemImplEmpty(mut item_impl) = parse_macro_input!(item);
+    item_impl.items.push(parse_quote! {
+        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+            iter.fold(Zero::zero(), Add::add)
         }
     });
     item_impl.into_token_stream().into()
@@ -190,5 +187,19 @@ struct Empty;
 impl Parse for Empty {
     fn parse(_input: ParseStream) -> syn::Result<Self> {
         Ok(Self)
+    }
+}
+
+struct ItemImplEmpty(ItemImpl);
+impl Parse for ItemImplEmpty {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let item_impl = input.parse::<ItemImpl>()?;
+        if !item_impl.items.is_empty() {
+            return Err(syn::Error::new(
+                item_impl.brace_token.span.join(),
+                "impl body must be empty",
+            ));
+        }
+        Ok(Self(item_impl))
     }
 }
