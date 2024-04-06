@@ -29,17 +29,17 @@
 //! explicitly writing an optimized implementation.
 //!
 //! - If the binary operator has a corresponding compound assignment operator:
-//!   1. Implement `A ⋄= &B` in terms of `&A ⋄ &B` using [assign_via_binop_ref_lhs!].
-//!   1. Implement `A ⋄= B` in terms of `A ⋄= &B` using [assign_via_assign_ref!].
-//!   1. Implement `A ⋄ &B` in terms of `A ⋄= &B` using [binop_via_assign!].
-//!   1. Implement `&A ⋄ B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_rhs!].
-//!   1. Implement `A ⋄ B` in terms of `A ⋄= B` using [binop_via_assign!].
+//!   1. Implement `A ⋄= &B` in terms of `&A ⋄ &B` using [assign_via_binop_ref_lhs].
+//!   1. Implement `A ⋄= B` in terms of `A ⋄= &B` using [assign_via_assign_ref].
+//!   1. Implement `A ⋄ &B` in terms of `A ⋄= &B` using [binop_via_assign].
+//!   1. Implement `&A ⋄ B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_rhs].
+//!   1. Implement `A ⋄ B` in terms of `A ⋄= B` using [binop_via_assign].
 //! - Otherwise:
-//!   1. Implement `A ⋄ &B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_lhs!].
-//!   1. Implement `&A ⋄ B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_rhs!].
+//!   1. Implement `A ⋄ &B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_lhs].
+//!   1. Implement `&A ⋄ B` in terms of `&A ⋄ &B` using [binop_via_binop_ref_rhs].
 //!   1. Implement `A ⋄ B` in one of two ways:
-//!      - in terms of `&A ⋄ B` using [binop_via_binop_ref_lhs!], *or*
-//!      - in terms of `A ⋄ &B` using [binop_via_binop_ref_rhs!] (preferred when `A ⋄ &B` is an
+//!      - in terms of `&A ⋄ B` using [binop_via_binop_ref_lhs], *or*
+//!      - in terms of `A ⋄ &B` using [binop_via_binop_ref_rhs] (preferred when `A ⋄ &B` is an
 //!        optimized implementation).
 
 /// Implements `A ⋄= B` in terms of `&A ⋄ &B` via `*self = &*self ⋄ y`.
