@@ -11,3 +11,6 @@ syn = { version = "2.0.53", features = ["full"] }
 
 [lib]
 proc-macro = true
+
+[features]
+num-traits = []

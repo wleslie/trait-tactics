@@ -8,5 +8,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-num-traits = "0.2.18"
+num-traits = { version = "0.2.18", optional = true }
 trait-tactics-macros = { path = "macros" }
+
+[features]
+num-traits = ["dep:num-traits", "trait-tactics-macros/num-traits"]
