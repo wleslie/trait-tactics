@@ -7,14 +7,14 @@ repository.workspace = true
 license.workspace = true
 categories.workspace = true
 
+[lib]
+proc-macro = true
+
 [dependencies]
 itertools = "0.12.1"
 proc-macro2 = "1.0.79"
 quote = "1.0.35"
 syn = { version = "2.0.53", features = ["full"] }
-
-[lib]
-proc-macro = true
 
 [features]
 num-traits = []

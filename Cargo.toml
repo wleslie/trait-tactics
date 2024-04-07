@@ -1,10 +1,3 @@
-[workspace.package]
-version = "0.1.0"
-edition = "2021"
-repository = "https://github.com/wleslie/trait-tactics"
-license = "MIT"
-categories = ["rust-patterns"]
-
 [package]
 name = "trait-tactics"
 description = "Macros that provide common patterns for implementing traits in terms of other traits"
@@ -14,9 +7,19 @@ repository.workspace = true
 license.workspace = true
 categories.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 num-traits = { version = "0.2.18", optional = true }
 trait-tactics-macros = { version = "0.1.0", path = "macros" }
 
 [features]
 num-traits = ["dep:num-traits", "trait-tactics-macros/num-traits"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/wleslie/trait-tactics"
+license = "MIT"
+categories = ["rust-patterns"]
