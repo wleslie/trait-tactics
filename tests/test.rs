@@ -30,12 +30,6 @@ mod with_assign {
     impl<T, U> Add<&B<U>> for A<T> where T: K {}
     #[binop_via_binop_ref_rhs(fn = add, output = A<T>)]
     impl<T, U> Add<B<U>> for &A<T> where T: K {}
-
-    // assign_via_binop_ref_lhs!(impl<T, U> AddAssign<&B<U>> for A<T> where T: K { fn add_assign => Add::add });
-    // assign_via_assign_ref!(impl<T, U> AddAssign<B<U>> for A<T> where T: K { fn add_assign });
-    // binop_via_assign!(impl<T, U> Add<B<U>> for A<T> where T: K { fn add => AddAssign::add_assign });
-    // binop_via_assign!(impl<T, U> Add<&B<U>> for A<T> where T: K { fn add => AddAssign::add_assign });
-    // binop_via_binop_ref_rhs!(impl<T, U> Add<B<U>> for &A<T> where T: K { fn add -> A<T> });
 }
 
 mod without_assign {
@@ -57,8 +51,4 @@ mod without_assign {
     impl<T, U> Mul<B<U>> for A<T> where T: K {}
     #[binop_via_binop_ref_lhs(fn = mul, output = A<T>)]
     impl<T, U> Mul<&B<U>> for A<T> where T: K {}
-
-    // binop_via_binop_ref_lhs!(impl<T, U> Mul<&B<U>> for A<T> where T: K { fn mul -> A<T> });
-    // binop_via_binop_ref_rhs!(impl<T, U> Mul<B<U>> for &A<T> where T: K { fn mul -> A<T> });
-    // binop_via_binop_ref_rhs!(impl<T, U> Mul<B<U>> for A<T> where T: K { fn mul -> A<T> });
 }

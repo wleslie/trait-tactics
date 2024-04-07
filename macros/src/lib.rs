@@ -55,9 +55,8 @@ pub fn sum_via_fold_zero_add(args: TokenStream, item: TokenStream) -> TokenStrea
     parse_macro_input!(args as Nothing);
     let ItemImplEmpty(mut item_impl) = parse_macro_input!(item);
     item_impl.items.push(parse_quote! {
-        fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-            // FIXME: do these paths need to be imported?
-            iter.fold(Zero::zero(), Add::add)
+        fn sum<I: ::std::iter::Iterator<Item = Self>>(iter: I) -> Self {
+            iter.fold(::num_traits::Zero::zero(), ::std::ops::Add::add)
         }
     });
     item_impl.into_token_stream().into()
