@@ -1,8 +1,8 @@
 [package]
 name = "trait-tactics"
-description = "Macros that provide common patterns for implementing traits in terms of other traits"
 version.workspace = true
 edition.workspace = true
+description = "Macros that provide common patterns for implementing traits in terms of other traits"
 repository.workspace = true
 license.workspace = true
 categories.workspace = true

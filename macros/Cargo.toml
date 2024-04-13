@@ -1,8 +1,8 @@
 [package]
 name = "trait-tactics-macros"
-description = "Internal dependency of trait-tactics"
 version.workspace = true
 edition.workspace = true
+description = "Internal dependency of trait-tactics"
 repository.workspace = true
 license.workspace = true
 categories.workspace = true
